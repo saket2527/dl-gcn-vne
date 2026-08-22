@@ -7,6 +7,8 @@ from datetime import datetime, date
 import logging
 import math
 import config
+import os
+import csv
 
 class temp_map:
     def __init__(self, vne_list,req_no, map=[]) -> None:
@@ -96,6 +98,16 @@ def main():
     print(f"\t\t{datetime.now().time()}\tTopsis Started")
     # substrate, vne_list = helper.read_pickle()
     substrate, vne_list = copy.deepcopy(config.substrate), copy.deepcopy(config.vne_list)
+    if not os.path.exists("nord_dataset.csv"):
+        with open("nord_dataset.csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "vnr_id",
+                "mapping",
+                "accepted",
+                "revenue",
+                "cost"
+            ])
     copy_sub = copy.deepcopy(substrate)
     logging.basicConfig(filename="final_log.log",filemode="w", level=logging.INFO)
 
@@ -145,14 +157,35 @@ def main():
 
     for req_no in req_order:
         req_map = node_map(copy.deepcopy(substrate), vne_list[req_no], req_no)
-        if req_map is  None:
-            #print(f"Node mapping not possible for req no {req_no}")
+        
+        #print(f"Node mapping not possible for req no {req_no}")
+        if req_map is None:
             logging.warning(f"\tNode mapping not possible for req no {req_no}\n")
+
+            with open("nord_dataset.csv", "a", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                req_no,
+                "NODE_MAPPING_FAILED",
+                0,
+                0,
+                0
+            ])
             continue
         req_map = temp_map(vne_list, req_no, req_map)
         if not edge_map(substrate, vne_list[req_no], req_no, req_map, vne_list):
-            #print(f"Edge mapping not possible for req no {req_no}")
             logging.warning(f"\tEdge mapping not possible for req no {req_no}\n")
+
+            with open("nord_dataset.csv", "a", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    req_no,
+                    "EDGE_MAPPING_FAILED",
+                    0,
+                    0,
+                    0
+                ])
+
             continue
         accepted += 1
         for ed in req_map.edge_map:
@@ -163,6 +196,21 @@ def main():
         logging.info(f"\t\tMapping for request {req_no} is done successfully!! {req_map.node_map} with revenue {sum(vne_list[req_no].node_weights.values()) + sum(vne_list[req_no].edge_weights.values())//2} and total cost {req_map.total_cost}\n")
         curr_map[req_no] = req_map
         revenue += sum(vne_list[req_no].node_weights.values()) + sum(vne_list[req_no].edge_weights.values())//2
+        current_revenue = (
+            sum(vne_list[req_no].node_weights.values())
+            + sum(vne_list[req_no].edge_weights.values()) // 2
+        )
+
+        with open("nord_dataset.csv", "a", newline="") as f:
+            writer = csv.writer(f)
+
+            writer.writerow([
+                req_no,
+                str(req_map.node_map),
+                1,
+                current_revenue,
+                req_map.total_cost
+            ])
 
     ed_cost  = 0
     no_cost = 0

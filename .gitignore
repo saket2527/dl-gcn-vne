@@ -4,5 +4,4 @@ __pycache__/
 *.log
 *.log.icloud
 Results.xlsx
-gcn_drl_vne.pth
 nord_dataset.csv
