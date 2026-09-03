@@ -19,6 +19,9 @@ def load_substrate(path: str | Path):
     path = Path(path)
     if not path.exists() and not path.is_absolute():
         path = Path(__file__).with_name(path.name)
+    if not path.exists() and path.name == "1_sagin.pickle":
+        from sagin_topology import save_topology
+        save_topology(path)
     with open(path, "rb") as stream:
         return pickle.load(stream)
 
@@ -29,11 +32,11 @@ def reward_for(success: bool, info: dict) -> float:
         return -1.0
 
     rc_ratio = info["revenue"] / max(info["node_cost"] + info["edge_cost"], 1e-8)
-    return 8.0 * rc_ratio - 0.35 * info["hops"]
+    return 8.0 * rc_ratio - 0.35 * info["hops"] - 0.01 * float(info.get("total_delay", 0.0))
 
 
 def train(
-    substrate_path: str | Path = "1_uniform.pickle",
+    substrate_path: str | Path = "1_sagin.pickle",
     episodes: int = 300,
     requests_per_episode: int = 30,
     learning_rate: float = 3e-4,
@@ -48,7 +51,8 @@ def train(
     torch.manual_seed(seed)
     device_obj = get_device(device)
     substrate_template = load_substrate(substrate_path)
-    policy = GCNPolicy(hidden_dim=hidden_dim, context_dim=4).to(device_obj)
+    feature_dim = 7 if hasattr(substrate_template, "node_domains") else 3
+    policy = GCNPolicy(feature_dim=feature_dim, hidden_dim=hidden_dim, context_dim=4).to(device_obj)
     optimizer = torch.optim.Adam(policy.parameters(), lr=learning_rate)
     policy.train()
 
@@ -98,14 +102,14 @@ def train(
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
     torch.save({
         "model_state_dict": policy.state_dict(),
-        "metadata": {"hidden_dim": hidden_dim, "feature_dim": 3, "context_dim": 4},
+        "metadata": {"hidden_dim": hidden_dim, "feature_dim": feature_dim, "context_dim": 4},
     }, checkpoint)
     return policy.eval()
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--substrate-pickle", dest="substrate_path", default="1_uniform.pickle")
+    parser.add_argument("--substrate-pickle", dest="substrate_path", default="1_sagin.pickle")
     parser.add_argument("--episodes", type=int, default=300)
     parser.add_argument("--requests-per-episode", type=int, default=30)
     parser.add_argument("--learning-rate", type=float, default=3e-4)

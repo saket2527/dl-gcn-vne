@@ -149,38 +149,18 @@ path1_cnt=0
 path2_cnt=0
 def edge_map(substrate, virtual, req_no, req_map, vne_list):
     substrate_copy = copy.deepcopy(substrate)
-    substrate_copy2 = copy.deepcopy(substrate)
     global path1_cnt
-    global path2_cnt
     pc = True
-    pc2 = True
     for edge in virtual.edges:
         if int(edge[0]) < int(edge[1]):
             weight = virtual.edge_weights[edge]
             left_node = req_map.node_map[int(edge[0])]
             right_node = req_map.node_map[int(edge[1])]
             
-            all_shortest_paths = find_all_paths(copy.deepcopy(substrate), left_node, right_node,
-                                        path=[])
-            shortest_paths, sn_bandw = map_virtual_link_on_substrate(all_shortest_paths,
-                                            weight,substrate_copy2.edge_weights)
-            shortPath_ls = []
-            cnt = 0
-            for ed in shortest_paths:
-                if cnt==0:
-                    shortPath_ls.append(str(ed))
-                shortPath_ls.append(str(shortest_paths[ed]))
-                cnt += 1
-
+            # Enumerating every simple path is exponential on the connected
+            # 84-node SAGIN.  It was only used for an unused diagnostic count;
+            # the actual TOPSIS embedding has always used this feasible BFS path.
             path = substrate_copy.findShortestPath(str(left_node), str(right_node), weight) # modified bfs
-
-            path2 = shortPath_ls
-            
-            # print(path)
-            # print(path2)
-            # print()
-            if(path2 == []):
-                pc2 = False
             if(path == []):
                 pc = False
             if path != []:
@@ -192,8 +172,6 @@ def edge_map(substrate, virtual, req_no, req_map, vne_list):
             else:
                 return False
     
-    if(pc2 == True):
-        path2_cnt += 1
     if(pc == True):
         path1_cnt += 1
     sub_wt = []

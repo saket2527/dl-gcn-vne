@@ -3,8 +3,39 @@ import sys
 import random
 import math
 import logging
+import networkx as nx
 
 x = False
+
+
+def resource_copy(substrate):
+    """Copy only state modified by the compatibility check, not the full graph."""
+    clone = copy.copy(substrate)
+    clone.edge_weights = substrate.edge_weights.copy()
+    return clone
+
+
+def bounded_feasible_paths(substrate, source, target, demand, max_paths=4):
+    """Return a small diverse set of feasible paths without path enumeration.
+
+    The original implementation enumerated every simple path, which is
+    exponential on a connected SAGIN.  NetworkX's lazy k-shortest-simple-path
+    iterator produces only the few alternatives the genetic population needs.
+    """
+    graph = nx.Graph()
+    for (left, right), bandwidth in substrate.edge_weights.items():
+        if bandwidth >= demand:
+            graph.add_edge(str(left), str(right), weight=1)
+    try:
+        paths = nx.shortest_simple_paths(graph, str(source), str(target), weight="weight")
+        candidates = []
+        for path in paths:
+            candidates.append(path)
+            if len(candidates) == max_paths:
+                break
+        return candidates
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        return []
 
 
 class temp_map:
@@ -110,12 +141,14 @@ def select_random_path(req_map, vne_list, req_no, all_paths, substrate):
     population_set = set()
     curr_pop = 0
     counter = 0
-    while curr_pop < 8 and counter < 1000:
+    population_limit = 4 if getattr(substrate, "topology_name", "") == "SAGIN-84" else 8
+    trial_limit = 128 if getattr(substrate, "topology_name", "") == "SAGIN-84" else 1000
+    while curr_pop < population_limit and counter < trial_limit:
         curr_map = temp_map(vne_list, req_no, req_map.node_map)
         for i in range(len(vne_list[req_no].edges) // 2):
             curr_map.edge_map.append(random.choice(all_paths[i]))
         if (
-            check_compatibility(curr_map, copy.deepcopy(substrate), vne_list[req_no])
+            check_compatibility(curr_map, resource_copy(substrate), vne_list[req_no])
             and get_hashable_map(curr_map) not in population_set
         ):
             curr_pop += 1
@@ -146,10 +179,7 @@ def edge_map(substrate, virtual, req_no, req_map, vne_list):
             virtual_edges.append(weight)
             left_node = req_map.node_map[int(edge[0])]
             right_node = req_map.node_map[int(edge[1])]
-            paths = substrate_copy.printAllPaths(
-                str(left_node), str(right_node), weight
-            )  # find all paths from src to dst
-            # print(paths)
+            paths = bounded_feasible_paths(substrate_copy, left_node, right_node, weight)
             if paths == []:
                 return None
             all_paths.append(paths)
@@ -201,7 +231,7 @@ def elastic_crossover(
     for i in parent2_pos:
         parent2.edge_map[i] = parent1_copy.edge_map[i]
         parent2.path_cost[i] = parent1_copy.path_cost[i]
-    if not check_compatibility(parent1, copy.deepcopy(substrate), virtual):
+    if not check_compatibility(parent1, resource_copy(substrate), virtual):
         # parent1 = None
         logging.warning(f"\t\t{itr}-could not add child1 due to incompatibility")
     elif get_hashable_map(parent1) in population_set:
@@ -215,7 +245,7 @@ def elastic_crossover(
         population_set.add(get_hashable_map(parent1))
         logging.info(f"\t\t\t{i}-Added Crossovered Child1 {parent1.edge_map}\tfitness: {parent1.fitness:.4f}\ttot_cost: {parent1.total_cost}")
 
-    if not check_compatibility(parent2, copy.deepcopy(substrate), virtual):
+    if not check_compatibility(parent2, resource_copy(substrate), virtual):
         # parent2 = None
         logging.warning(f"\t\t{itr}-could not add child2 due to incompatibility")
     elif get_hashable_map(parent2) in population_set:
@@ -237,11 +267,12 @@ def mutate(
     random_no = random.randint(0, len(child.edge_map) - 1)
     sel_path = child.edge_map[random_no]
     edge = (str(sel_path[0]), str(sel_path[-1]))
-    child.edge_map[random_no] = substrate.findPathFromSrcToDst(
-        edge[0], edge[1], child.edge_weight[random_no]
-    )
+    alternatives = bounded_feasible_paths(substrate, edge[0], edge[1], child.edge_weight[random_no])
+    if not alternatives:
+        return None
+    child.edge_map[random_no] = random.choice(alternatives)
     child.path_cost[random_no] = (len(child.edge_map[random_no])-1)*child.edge_weight[random_no]
-    if not check_compatibility(child, copy.deepcopy(substrate), virtual):
+    if not check_compatibility(child, resource_copy(substrate), virtual):
         child = None
         logging.warning(f"\t\t{itr}-could not add mutated_child due to incompatibility")
     elif get_hashable_map(child) in population_set:

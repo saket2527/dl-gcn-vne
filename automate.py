@@ -13,6 +13,7 @@ from Puvnp import main as Puvnp
 from dl_vne import main as dl_vne
 from vne_u import create_vne as vne_u
 import graph_extraction_uniform
+import sagin_topology
 import logging
 import config
 import pickle
@@ -407,19 +408,25 @@ def runUniformExtraction(pickle_name):
     main(substrate, vne_u)
 
 
+def runSaginExtraction(pickle_name):
+    """Run every baseline against the fixed 84-node SAGIN substrate."""
+    substrate = extractSubstrate(str(pickle_name))
+    printToExcel()
+    for _ in range(3):
+        printToExcel(pre_resource='SAGIN-84')
+    printToExcel()
+    print("\nSAGIN-84 Extraction\n")
+    main(substrate, vne_u)
+
+
 
 if __name__ == "__main__":
 
-    file_exists = os.path.exists('1_random.pickle') or os.path.exists('1_uniform.pickle') or os.path.exists('1_poission.pickle') or os.path.exists('1_normal.pickle')
-    print(file_exists)
-    # file_exists = False       #Manually set, if want to update a substrate pickle
-    if(file_exists==False):
+    sagin_pickle = '1_sagin.pickle'
+    if not os.path.exists(sagin_pickle):
+        generateSubstrate(sagin_topology.for_automate, sagin_pickle)
 
-        generateSubstrate(graph_extraction_uniform.for_automate, str(1)+'_uniform.pickle')    #Uniform Distribution
-
-
-
-    runUniformExtraction('1_uniform.pickle')
+    runSaginExtraction(sagin_pickle)
 
     
     excel = pd.DataFrame(output_dict)

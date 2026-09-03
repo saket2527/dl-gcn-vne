@@ -47,6 +47,14 @@ def _set_edge_weight(graph: Any, left: int, right: int, value: float) -> None:
     raise KeyError(f"No bandwidth entry for substrate edge ({left}, {right})")
 
 
+def _edge_delay(graph: Any, left: int, right: int) -> float:
+    """Return link delay; legacy substrates fall back to unit hop cost."""
+    for key in ((str(left), str(right)), (left, right)):
+        if hasattr(graph, "delay") and key in graph.delay:
+            return float(graph.delay[key])
+    return 1.0
+
+
 def undirected_edges(graph: Any) -> Iterable[tuple[int, int]]:
     seen: set[tuple[int, int]] = set()
     for left, right in graph.edge_weights:
@@ -74,11 +82,15 @@ class VNEEnvironment:
         n = self.substrate.nodes
         adjacency = torch.zeros((n, n), dtype=torch.float32, device=self.device)
         bandwidth_sums = torch.zeros(n, dtype=torch.float32, device=self.device)
+        delay_sums = torch.zeros(n, dtype=torch.float32, device=self.device)
         for left, right in undirected_edges(self.substrate):
             bw = _edge_weight(self.substrate, left, right)
             adjacency[left, right] = adjacency[right, left] = 1.0
             bandwidth_sums[left] += bw
             bandwidth_sums[right] += bw
+            delay = _edge_delay(self.substrate, left, right)
+            delay_sums[left] += delay
+            delay_sums[right] += delay
         available_cpu = torch.tensor(
             [float(self.substrate.node_weights[i]) for i in range(n)], dtype=torch.float32, device=self.device
         )
@@ -86,14 +98,22 @@ class VNEEnvironment:
         # Feature scaling is per current substrate state, preserving dynamics.
         def normalise(value: torch.Tensor) -> torch.Tensor:
             return value / value.max().clamp_min(1.0)
-        features = torch.stack((normalise(available_cpu), normalise(bandwidth_sums), normalise(degree)), dim=1)
+        features = [normalise(available_cpu), normalise(bandwidth_sums), normalise(degree)]
+        if hasattr(self.substrate, "node_domains"):
+            features.append(normalise(delay_sums))
+            domain_index = {"space": 0, "air": 1, "ground": 2}
+            indices = torch.tensor(
+                [domain_index[self.substrate.node_domains[i]] for i in range(n)], device=self.device
+            )
+            features.extend([(indices == index).float() for index in range(3)])
+        features = torch.stack(features, dim=1)
         with_self_loops = adjacency + torch.eye(n, device=self.device)
         inv_sqrt = with_self_loops.sum(dim=1).clamp_min(1.0).pow(-0.5)
         normalized_adjacency = inv_sqrt[:, None] * with_self_loops * inv_sqrt[None, :]
         return features, normalized_adjacency, available_cpu
 
     def _shortest_feasible_path(self, source: int, target: int, demand: float) -> list[int]:
-        """Dijkstra route on residual-bandwidth-feasible links (unit hop cost)."""
+        """Dijkstra route on residual-bandwidth-feasible links, minimizing delay for SAGIN."""
         if source == target:
             return [source]
         parent: dict[int, int | None] = {source: None}
@@ -112,7 +132,8 @@ class VNEEnvironment:
                 neighbor = _node_id(neighbor)
                 if _edge_weight(self.substrate, current, neighbor) < demand:
                     continue
-                candidate = current_distance + 1
+                link_cost = _edge_delay(self.substrate, current, neighbor) if getattr(self.substrate, "use_delay_routing", False) else 1
+                candidate = current_distance + link_cost
                 if candidate < distance.get(neighbor, float("inf")):
                     distance[neighbor] = candidate
                     parent[neighbor] = current
@@ -132,7 +153,8 @@ class VNEEnvironment:
                 neighbor = _node_id(neighbor)
                 if _edge_weight(self.substrate, current, neighbor) < demand:
                     continue
-                candidate = current_distance + 1.0
+                link_cost = _edge_delay(self.substrate, current, neighbor) if getattr(self.substrate, "use_delay_routing", False) else 1.0
+                candidate = current_distance + link_cost
                 if candidate < distances[neighbor]:
                     distances[neighbor] = candidate
                     heappush(queue, (candidate, neighbor))
@@ -199,6 +221,11 @@ class VNEEnvironment:
         for virtual_node in order:
             demand = float(request.node_weights[virtual_node])
             features, adjacency, available_cpu = self.adjacency_and_features()
+            if features.shape[1] != policy.feature_dim:
+                raise ValueError(
+                    f"Policy expects {policy.feature_dim} substrate features but topology provides {features.shape[1]}. "
+                    "Train a new checkpoint for this topology."
+                )
             route_cost, route_feasible = self._candidate_routing_features(request, virtual_node, placement)
             mask = policy.feasibility_mask(available_cpu, demand, used) & route_feasible
             virtual_degree = sum(
@@ -235,6 +262,7 @@ class VNEEnvironment:
             placement[virtual_node] = substrate_node
 
         hop_count = 0
+        total_delay = 0.0
         for left, right, demand in self._virtual_edges(request):
             path = self._shortest_feasible_path(placement[left], placement[right], demand)
             if not path:
@@ -242,6 +270,7 @@ class VNEEnvironment:
                 return False, log_probs, {"reason": "path_not_found", "placement": placement, "transitions": transitions}
             hop_count += len(path) - 1
             for source, target in zip(path, path[1:]):
+                total_delay += _edge_delay(self.substrate, source, target)
                 _set_edge_weight(self.substrate, source, target, _edge_weight(self.substrate, source, target) - demand)
                 _set_edge_weight(self.substrate, target, source, _edge_weight(self.substrate, target, source) - demand)
                 bw_changes.append((source, target, demand))
@@ -251,7 +280,7 @@ class VNEEnvironment:
         revenue = node_cost + sum(demand for _, _, demand in self._virtual_edges(request))
         return True, log_probs, {
             "placement": placement, "node_cost": node_cost, "edge_cost": edge_cost,
-            "revenue": revenue, "hops": hop_count, "transitions": transitions,
+            "revenue": revenue, "hops": hop_count, "total_delay": total_delay, "transitions": transitions,
         }
 
 
@@ -263,6 +292,7 @@ def load_policy(checkpoint: str | os.PathLike[str] = DEFAULT_CHECKPOINT, device:
     state = torch.load(checkpoint, map_location=device)
     metadata = state.get("metadata", {}) if isinstance(state, dict) else {}
     policy = GCNPolicy(
+        feature_dim=int(metadata.get("feature_dim", 3)),
         hidden_dim=int(metadata.get("hidden_dim", 64)),
         context_dim=int(metadata.get("context_dim", 1)),
     ).to(device)
@@ -274,6 +304,10 @@ def load_policy(checkpoint: str | os.PathLike[str] = DEFAULT_CHECKPOINT, device:
 
 
 def _load_substrate(path: str | os.PathLike[str]) -> Any:
+    path = Path(path)
+    if not path.exists() and path.name == "1_sagin.pickle":
+        from sagin_topology import save_topology
+        save_topology(path)
     with open(path, "rb") as stream:
         return pickle.load(stream)
 
@@ -291,7 +325,7 @@ def main(
         substrate = substrate if substrate is not None else getattr(config, "substrate", None)
         vne_list = vne_list if vne_list is not None else getattr(config, "vne_list", None)
     if substrate is None or not hasattr(substrate, "nodes"):
-        substrate = _load_substrate(Path(__file__).with_name("1_uniform.pickle"))
+        substrate = _load_substrate(Path(__file__).with_name("1_sagin.pickle"))
     if not vne_list:
         from vne_u import create_vne
         vne_list = create_vne(no_requests=10)

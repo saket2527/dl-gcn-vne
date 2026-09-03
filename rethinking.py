@@ -109,10 +109,12 @@ def main():
         logging.info(f"\n\n")
         elite_population = copy.deepcopy(initial_population)
         if len(elite_population) > 1:
-            for _ in range(8):
+            generations = 2 if getattr(substrate, "topology_name", "") == "SAGIN-84" else 8
+            offspring_per_generation = 2 if getattr(substrate, "topology_name", "") == "SAGIN-84" else 8
+            for _ in range(generations):
                 logging.info(f"\t\t\t\t ITERATION {_}")
                 i = 0
-                while i < 8:
+                while i < offspring_per_generation:
                     i += 1
                     parent1, parent2 = tournament_selection( # check it for random selection
                         elite_population, vne_list, req_no
