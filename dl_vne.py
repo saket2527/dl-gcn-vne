@@ -211,6 +211,7 @@ class VNEEnvironment:
         log_probs: list[torch.Tensor] = []
         transitions: list[dict[str, torch.Tensor]] = []
         placement: dict[int, int] = {}
+        route_paths: list[dict[str, Any]] = []
         used = torch.zeros(self.substrate.nodes, dtype=torch.bool, device=self.device)
         # Place virtual hubs first: they have the greatest influence on path cost.
         def priority(virtual_node: int) -> tuple[int, float, float]:
@@ -246,7 +247,10 @@ class VNEEnvironment:
             logits = policy(features, adjacency, context, mask)
             if not torch.isfinite(logits).any():
                 self.rollback(cpu_changes, bw_changes)
-                return False, log_probs, {"reason": "insufficient_cpu", "transitions": transitions}
+                return False, log_probs, {
+                    "reason": "insufficient_cpu", "placement": placement,
+                    "route_paths": route_paths, "transitions": transitions,
+                }
             distribution = torch.distributions.Categorical(logits=logits)
             action = distribution.sample() if sample else torch.argmax(logits)
             log_probs.append(distribution.log_prob(action))
@@ -267,7 +271,15 @@ class VNEEnvironment:
             path = self._shortest_feasible_path(placement[left], placement[right], demand)
             if not path:
                 self.rollback(cpu_changes, bw_changes)
-                return False, log_probs, {"reason": "path_not_found", "placement": placement, "transitions": transitions}
+                return False, log_probs, {
+                    "reason": "path_not_found", "placement": placement,
+                    "route_paths": route_paths, "transitions": transitions,
+                }
+            route_paths.append({
+                "virtual_edge": (left, right),
+                "substrate_path": path,
+                "bandwidth_demand": demand,
+            })
             hop_count += len(path) - 1
             for source, target in zip(path, path[1:]):
                 total_delay += _edge_delay(self.substrate, source, target)
@@ -280,7 +292,8 @@ class VNEEnvironment:
         revenue = node_cost + sum(demand for _, _, demand in self._virtual_edges(request))
         return True, log_probs, {
             "placement": placement, "node_cost": node_cost, "edge_cost": edge_cost,
-            "revenue": revenue, "hops": hop_count, "total_delay": total_delay, "transitions": transitions,
+            "revenue": revenue, "hops": hop_count, "total_delay": total_delay,
+            "route_paths": route_paths, "transitions": transitions,
         }
 
 
