@@ -40,6 +40,45 @@ https://www.youtube.com/watch?v=JKB3aVyCMuo&t=506s<br />
 
 ## Usage
 
+### DRL-VNE
+
+`drl_vne.py` implements the five-stage policy described in *Space-Air-
+Ground Integrated Multi-domain Network Resource Orchestration based on Virtual
+Network Architecture: a DRL Method*. It trains on the existing
+`1_sagin.pickle` topology, evaluates generated VNRs, and adds a
+`DRL-VNE` row to `Results.xlsx`:
+
+```bash
+python3 drl_vne.py
+```
+
+By default, it trains with 1,000 requests in batches of 100, evaluates five
+requests, and saves the policy to `drl_vne.pth`. Use
+`--training-requests`, `--batch-size`, and `--evaluation-requests` to change
+those counts. Add `--skip-training` to reuse an existing checkpoint. The
+regular `automate.py` run evaluates this policy on the same VNR batch as
+the other enabled algorithms; train the paper policy first.
+
+The policy uses the paper's CPU, adjacent bandwidth, adjacent delay, and
+average-hop-distance node features, followed by affine scoring, softmax,
+feasibility filtering, and probability-ranked output. Link mapping uses BFS
+over residual-bandwidth-feasible links. This repository's virtual delay
+demands and SAGIN link delays use incompatible value ranges, so link delay is
+used as a feature and equal-hop path tie-breaker rather than a hard delay
+constraint. To support the requested revenue-to-cost objective, the final
+candidate ranking also discounts placements that require more bandwidth-
+weighted hops to already-mapped virtual neighbors; this is an explicit
+implementation choice beyond the paper's underspecified output ordering.
+
+Run the fixed five-node, six-link, two-request embedding test with:
+
+```bash
+python3 test_drl_vne.py
+```
+
+The test uses `drl_vne.pth` and writes each node mapping, link route, and
+resource update to `drl_vne_test.log`.
+
 ###  In vne_u.py, we can set the various parameters related to Virtual network requests(VNRs).<br />
 
 - We can set the minimum and maximum number of VMs of VNRs in the create_vne function.<br />
@@ -108,4 +147,3 @@ This codebase is available publicly for only for non-commercial use. If you use 
 
 ## Contact
 If you have any questions, simply write a mail to  Keerthanswamy(AT)gmail(DOT)com.
-

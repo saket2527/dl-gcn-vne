@@ -10,7 +10,7 @@ from topsis_updated import main as topsis
 from nrm import main as NRM
 from Rematch_AHP import main as Rematch_AHP
 from Puvnp import main as Puvnp
-from dl_vne import main as dl_vne
+from drl_vne import main as drl_vne
 from vne_u import create_vne as vne_u
 import graph_extraction_uniform
 import sagin_topology
@@ -271,33 +271,33 @@ def exec_puvnp(tot=15):
         total_links=puvnp_out ['total_links']
     )
 
-def exec_dl_vne(tot=0):
-    """Run the trained DL-GCN-VNE policy and append its row to Results.xlsx."""
-    dl_out = dl_vne()
+def exec_drl_vne(tot=0):
+    """Run the SAGIN DRL policy on the shared VNR workload."""
+    drl_out = drl_vne()
     sleep(tot)
-    total_cost = dl_out['total_cost']
-    total_request = dl_out['total_request']
+    total_cost = drl_out['total_cost']
+    total_request = drl_out['total_request']
     printToExcel(
-        algorithm='DL-GCN-VNE',
-        revenue=dl_out['revenue'],
+        algorithm='DRL-VNE',
+        revenue=drl_out['revenue'],
         total_cost=total_cost,
-        revenuetocostratio=(dl_out['revenue'] / total_cost * 100) if total_cost else 0.0,
-        accepted=dl_out['accepted'],
+        revenuetocostratio=(drl_out['revenue'] / total_cost * 100) if total_cost else 0.0,
+        accepted=drl_out['accepted'],
         total_request=total_request,
-        embeddingratio=(dl_out['accepted'] / total_request * 100) if total_request else 0.0,
-        pre_resource=dl_out['pre_resource'],
-        post_resource=dl_out['post_resource'],
-        consumed=dl_out['pre_resource'] - dl_out['post_resource'],
-        avg_bw=dl_out['avg_bw'],
-        avg_crb=dl_out['avg_crb'],
-        avg_link=dl_out['avg_link'],
-        No_of_Links_used=dl_out['No_of_Links_used'],
-        avg_node=dl_out['avg_node'],
-        No_of_Nodes_used=dl_out['No_of_Nodes_used'],
-        avg_path=dl_out['avg_path'],
-        avg_exec=dl_out['avg_exec'].total_seconds() * 1000 / max(1, total_request),
-        total_nodes=dl_out['total_nodes'],
-        total_links=dl_out['total_links'],
+        embeddingratio=(drl_out['accepted'] / total_request * 100) if total_request else 0.0,
+        pre_resource=drl_out['pre_resource'],
+        post_resource=drl_out['post_resource'],
+        consumed=drl_out['pre_resource'] - drl_out['post_resource'],
+        avg_bw=drl_out['avg_bw'],
+        avg_crb=drl_out['avg_crb'],
+        avg_link=drl_out['avg_link'],
+        No_of_Links_used=drl_out['No_of_Links_used'],
+        avg_node=drl_out['avg_node'],
+        No_of_Nodes_used=drl_out['No_of_Nodes_used'],
+        avg_path=drl_out['avg_path'],
+        avg_exec=drl_out['avg_exec'].total_seconds() * 1000 / max(1, total_request),
+        total_nodes=drl_out['total_nodes'],
+        total_links=drl_out['total_links'],
     )
 
 def printToExcel(algorithm='', revenue='', total_cost='', revenuetocostratio='', accepted='', total_request='', 
@@ -365,7 +365,7 @@ def main(substrate, vne):
             exec_NRM(tot)
             exec_Rematch(tot)
             exec_puvnp(tot)  # PUVNP
-            exec_dl_vne(tot)  # DL-GCN-VNE
+            exec_drl_vne(tot)  # Five-stage DRL-VNE
             
             if((cnt+1)%2==0):
                 print(f'\n\tFor REQUEST {req_no} ITERATION {cnt+1} COMPLETED\n\n')
