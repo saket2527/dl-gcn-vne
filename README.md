@@ -101,6 +101,23 @@ The regular `automate.py` run includes DL-GCN-VNE and records its results in
 python3 test_dl_gcn_vne.py
 ```
 
+### GAT-VNE
+
+`gat_vne.py` uses a multi-head Graph Attention Network to score feasible
+substrate placements. It shares the VNE environment and PPO training objective
+with DL-GCN-VNE, but learns attention weights over neighboring substrate
+nodes. The trained checkpoint is included as `gat_vne.pth`, so no training is
+needed to evaluate it:
+
+```bash
+python3 gat_vne.py
+```
+
+Run `python3 automate.py` to record a `GAT-VNE` row in `Results.xlsx` alongside
+the other enabled algorithms. To retrain or replace the checkpoint, run
+`python3 train_gat.py`; options include `--episodes`,
+`--requests-per-episode`, `--heads`, and `--checkpoint`.
+
 ###  In vne_u.py, we can set the various parameters related to Virtual network requests(VNRs).<br />
 
 - We can set the minimum and maximum number of VMs of VNRs in the create_vne function.<br />

@@ -12,6 +12,7 @@ from Rematch_AHP import main as Rematch_AHP
 from Puvnp import main as Puvnp
 from drl_vne import main as drl_vne
 from dl_vne import main as dl_gcn_vne
+from gat_vne import main as gat_vne
 from vne_u import create_vne as vne_u
 import sagin_topology
 import logging
@@ -329,6 +330,35 @@ def exec_dl_gcn_vne(tot=0):
         total_links=dl_out['total_links'],
     )
 
+def exec_gat_vne(tot=0):
+    """Run the trained GAT-VNE policy and append its result row."""
+    gat_out = gat_vne()
+    sleep(tot)
+    total_cost = gat_out['total_cost']
+    total_request = gat_out['total_request']
+    printToExcel(
+        algorithm='GAT-VNE',
+        revenue=gat_out['revenue'],
+        total_cost=total_cost,
+        revenuetocostratio=(gat_out['revenue'] / total_cost * 100) if total_cost else 0.0,
+        accepted=gat_out['accepted'],
+        total_request=total_request,
+        embeddingratio=(gat_out['accepted'] / total_request * 100) if total_request else 0.0,
+        pre_resource=gat_out['pre_resource'],
+        post_resource=gat_out['post_resource'],
+        consumed=gat_out['pre_resource'] - gat_out['post_resource'],
+        avg_bw=gat_out['avg_bw'],
+        avg_crb=gat_out['avg_crb'],
+        avg_link=gat_out['avg_link'],
+        No_of_Links_used=gat_out['No_of_Links_used'],
+        avg_node=gat_out['avg_node'],
+        No_of_Nodes_used=gat_out['No_of_Nodes_used'],
+        avg_path=gat_out['avg_path'],
+        avg_exec=gat_out['avg_exec'].total_seconds() * 1000 / max(1, total_request),
+        total_nodes=gat_out['total_nodes'],
+        total_links=gat_out['total_links'],
+    )
+
 def printToExcel(algorithm='', revenue='', total_cost='', revenuetocostratio='', accepted='', total_request='', 
 embeddingratio='', pre_resource='', post_resource='',consumed='',avg_bw='',avg_crb='',avg_link='',No_of_Links_used='',
 avg_node='',No_of_Nodes_used='',avg_path='',avg_exec='', total_nodes='', total_links=''):
@@ -396,6 +426,7 @@ def main(substrate, vne):
             exec_puvnp(tot)  # PUVNP
             exec_drl_vne(tot)  # Five-stage DRL-VNE
             exec_dl_gcn_vne(tot)  # DL-GCN-VNE
+            exec_gat_vne(tot)  # GAT-VNE
 
             if((cnt+1)%2==0):
                 print(f'\n\tFor REQUEST {req_no} ITERATION {cnt+1} COMPLETED\n\n')
