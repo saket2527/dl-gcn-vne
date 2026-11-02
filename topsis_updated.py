@@ -1,7 +1,7 @@
 from turtle import right
 # This one modified BFA_P
 from topsis_helper_new import get_ranks #without katz
-#from topsis_helper  import get_ranks  #with katz
+#
 import helper
 import sys
 import copy

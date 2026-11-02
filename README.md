@@ -70,14 +70,36 @@ candidate ranking also discounts placements that require more bandwidth-
 weighted hops to already-mapped virtual neighbors; this is an explicit
 implementation choice beyond the paper's underspecified output ordering.
 
-Run the fixed five-node, six-link, two-request embedding test with:
+Run the interactive embedding test with:
 
 ```bash
 python3 test_drl_vne.py
 ```
 
-The test uses `drl_vne.pth` and writes each node mapping, link route, and
-resource update to `drl_vne_test.log`.
+Enter the substrate node and link counts, then provide the two 1-based node
+endpoints for each link. Next, enter the request count and each request's node
+and link counts and endpoints. Resource capacities and demands are generated
+using the test's built-in ranges. The script uses `drl_vne.pth` and writes each
+node mapping, link route, and resource update to `drl_vne_test.log`.
+
+### DL-GCN-VNE
+
+`dl_vne.py` implements the PPO-trained graph-convolutional placement policy.
+The trained checkpoint is `gcn_drl_vne.pth`; evaluate it on the configured
+workload with:
+
+```bash
+python3 dl_vne.py
+```
+
+Train or replace the checkpoint with `python3 train_drl.py`. The trainer accepts
+`--episodes`, `--requests-per-episode`, and `--checkpoint` to configure training.
+The regular `automate.py` run includes DL-GCN-VNE and records its results in
+`Results.xlsx`. Run its focused embedding check with:
+
+```bash
+python3 test_dl_gcn_vne.py
+```
 
 ###  In vne_u.py, we can set the various parameters related to Virtual network requests(VNRs).<br />
 
@@ -88,24 +110,10 @@ resource update to `drl_vne_test.log`.
 
 - Run vne_u.py after doing any modifications. <br />
 
-###  In grpah_extraction_uniform.py:<br />
+### Batch results
 
-- In the get_graphs function mention the pickle file related to substrate network generation, the same is available in the folder P3_ALIB_MASTER. EX: os.path.join( os.path.dirname(current), "P3_ALIB_MASTER", "input", "senario_RedBestel.pickle",)<br />
-
-- In graph.parameters function set substrate network resources like BandWidth(min,max), CRB(min,max), LocationX(min,max), LocationY(min,max), Delay(min,max).<br />
-- Example: (500, 1000, 200, 1000, 0, 100, 0, 100, 1, 1)<br />
-
-- Run grpah_extraction_uniform.py after doing any modification. <br />
-
-### grpah_u.py
-
-- This file generates the standard 1_uniform.pickle file, which contains all the information about substrate network topologies, such as the number of servers, links, and connectivity. It also includes values for each substrate network resource.
-
-###  In the automate.py file set the VNR size such as [250, 500, 750, 1000] and also mention the number of iterations needs to execute for each VNR size in the iteration variable.<br />
-
-- Finally, run the automate.py file. After successfully running, a 1_uniform.pickle file is created (If it already does not exist in the specified path). It has all input parameters related to the substrate network parameters, such as CRB, Bandwidth, Delay, and Location.
-
-- Final embedding results are captured in Results.xlsx, which includes values for various metrics for all test scenarios for every iteration.
+`automate.py` runs the enabled algorithms on the SAGIN topology in
+`1_sagin.pickle`. Final embedding results are captured in `Results.xlsx`.
 
 ### References
 [1] E. D. Matthias Rost, Alexander Elvers, “Alib,” https://github.com/vnep-approx/alib, 2020. <br />

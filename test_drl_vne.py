@@ -1,4 +1,4 @@
-"""Run DRL-VNE on a fixed five-node substrate and two virtual requests."""
+"""Interactively build substrate and virtual request topologies for DRL-VNE."""
 
 from __future__ import annotations
 
@@ -19,6 +19,10 @@ from drl_vne import (
 
 SUBSTRATE_EDGES = ((0, 1), (1, 2), (2, 3), (3, 4), (4, 0), (0, 2))
 NODE_DOMAINS = ("space", "space", "air", "ground", "ground")
+
+
+def _node_label(node: int, prefix: str) -> str:
+    return f"{prefix}{node + 1}"
 
 
 def _make_graph(
@@ -83,6 +87,121 @@ def _make_requests() -> list[graph_u.Graph]:
     ]
 
 
+def _make_interactive_graph(
+    nodes: int,
+    links: tuple[tuple[int, int], ...],
+    *,
+    substrate: bool,
+) -> graph_u.Graph:
+    if substrate:
+        cpu_demands = tuple(180 + node % 5 * 10 for node in range(nodes))
+        bandwidths = tuple(70 + link % 5 * 10 for link in range(len(links)))
+        delays = tuple(1 + link % 3 for link in range(len(links)))
+    else:
+        cpu_demands = tuple(30 + node % 4 * 10 for node in range(nodes))
+        bandwidths = tuple(20 + link % 6 for link in range(len(links)))
+        delays = tuple(1 for _ in links)
+
+    graph = _make_graph(nodes, links, cpu_demands, bandwidths, delays)
+    if substrate:
+        graph.node_domains = {
+            node: ("space", "air", "ground")[node % 3] for node in range(nodes)
+        }
+        graph.topology_name = "DRL-VNE-interactive-substrate"
+        graph.use_delay_routing = True
+    return graph
+
+
+def _prompt_integer(prompt: str, minimum: int, maximum: int | None = None) -> int:
+    while True:
+        value = input(prompt).strip()
+        try:
+            number = int(value)
+        except ValueError:
+            print("Enter a whole number.")
+            continue
+        if number < minimum or (maximum is not None and number > maximum):
+            limit = (
+                f"between {minimum} and {maximum}"
+                if maximum is not None
+                else f"at least {minimum}"
+            )
+            print(f"Enter a number {limit}.")
+            continue
+        return number
+
+
+def _prompt_links(nodes: int, link_count: int, name: str) -> tuple[tuple[int, int], ...]:
+    links: set[tuple[int, int]] = set()
+    while len(links) < link_count:
+        link_number = len(links) + 1
+        value = input(
+            f"{name} link {link_number} endpoints (1-{nodes}, e.g. 1 2): "
+        ).split()
+        if len(value) != 2:
+            print("Enter exactly two node numbers.")
+            continue
+        try:
+            left, right = (int(endpoint) - 1 for endpoint in value)
+        except ValueError:
+            print("Enter whole-number node endpoints.")
+            continue
+        if not (0 <= left < nodes and 0 <= right < nodes):
+            print(f"Endpoints must be between 1 and {nodes}.")
+            continue
+        if left == right:
+            print("A link must connect two different nodes.")
+            continue
+        edge = tuple(sorted((left, right)))
+        if edge in links:
+            print("That link was already entered.")
+            continue
+        links.add(edge)
+    return tuple(sorted(links))
+
+
+def _prompt_topologies() -> tuple[graph_u.Graph, list[graph_u.Graph]]:
+    substrate_nodes = _prompt_integer("Number of substrate nodes: ", 1)
+    maximum_substrate_links = substrate_nodes * (substrate_nodes - 1) // 2
+    substrate_link_count = _prompt_integer(
+        f"Number of substrate links (0-{maximum_substrate_links}): ",
+        0,
+        maximum_substrate_links,
+    )
+    substrate_links = _prompt_links(
+        substrate_nodes, substrate_link_count, "Substrate"
+    )
+    substrate = _make_interactive_graph(
+        substrate_nodes, substrate_links, substrate=True
+    )
+
+    request_count = _prompt_integer("Number of virtual network requests: ", 1)
+    requests = []
+    for request_number in range(1, request_count + 1):
+        request_nodes = _prompt_integer(
+            f"Request {request_number} number of nodes "
+            f"(1-{substrate_nodes}): ",
+            1,
+            substrate_nodes,
+        )
+        maximum_request_links = request_nodes * (request_nodes - 1) // 2
+        request_link_count = _prompt_integer(
+            f"Request {request_number} number of links "
+            f"(0-{maximum_request_links}): ",
+            0,
+            maximum_request_links,
+        )
+        request_links = _prompt_links(
+            request_nodes, request_link_count, f"Request {request_number}"
+        )
+        requests.append(
+            _make_interactive_graph(
+                request_nodes, request_links, substrate=False
+            )
+        )
+    return substrate, requests
+
+
 def _unique_bandwidth(graph: Any) -> dict[tuple[int, int], float]:
     return {
         edge: float(graph.edge_weights[(str(edge[0]), str(edge[1]))])
@@ -107,6 +226,8 @@ def _build_logger(log_path: Path) -> logging.Logger:
 def run_test(
     checkpoint: str | Path = DEFAULT_DRL_CHECKPOINT,
     log_path: str | Path | None = None,
+    substrate: graph_u.Graph | None = None,
+    requests: list[graph_u.Graph] | None = None,
 ) -> dict[str, Any]:
     log_file = (
         Path(log_path)
@@ -117,30 +238,30 @@ def run_test(
     logger = _build_logger(log_file)
     try:
         torch.manual_seed(7)
-        substrate = _make_substrate()
-        requests = _make_requests()
+        substrate = substrate if substrate is not None else _make_substrate()
+        requests = requests if requests is not None else _make_requests()
         policy = load_policy(checkpoint)
         environment = DRLVNEEnvironment(substrate)
 
-        logger.info("Starting the DRL-VNE 5-node embedding test.")
+        logger.info("Starting the DRL-VNE embedding test.")
         logger.info("Checkpoint: %s", Path(checkpoint).resolve())
         logger.info(
             "Substrate: %d nodes, %d undirected links",
             substrate.nodes,
-            len(SUBSTRATE_EDGES),
+            len(_unique_bandwidth(substrate)),
         )
         for node in range(substrate.nodes):
             logger.info(
                 "Substrate node %s: domain=%s CPU=%g",
-                "ABCDE"[node],
+                _node_label(node, "S"),
                 substrate.node_domains[node],
                 substrate.node_weights[node],
             )
         for (left, right), capacity in _unique_bandwidth(substrate).items():
             logger.info(
                 "Substrate link %s-%s: bandwidth=%g delay=%g",
-                "ABCDE"[left],
-                "ABCDE"[right],
+                _node_label(left, "S"),
+                _node_label(right, "S"),
                 capacity,
                 substrate.delay[(str(left), str(right))],
             )
@@ -161,15 +282,15 @@ def run_test(
                     logger.info(
                         "Request %d virtual node %s: CPU demand=%g",
                         request_number,
-                        "abc"[node],
+                        _node_label(node, "V"),
                         demand,
                     )
                 for left, right, demand in request_edges:
                     logger.info(
                         "Request %d virtual link %s-%s: bandwidth demand=%g",
                         request_number,
-                        "abc"[left],
-                        "abc"[right],
+                        _node_label(left, "V"),
+                        _node_label(right, "V"),
                         demand,
                     )
 
@@ -186,22 +307,22 @@ def run_test(
                         "Request %d node mapping: %s -> %s "
                         "(substrate CPU %g -> %g; demand=%g)",
                         request_number,
-                        "abc"[virtual_node],
-                        "ABCDE"[substrate_node],
+                        _node_label(virtual_node, "V"),
+                        _node_label(substrate_node, "S"),
                         cpu_before[substrate_node],
                         environment.substrate.node_weights[substrate_node],
                         request.node_weights[virtual_node],
                     )
                 for route in info.get("routes", []):
                     substrate_path = "-".join(
-                        "ABCDE"[node] for node in route["substrate_path"]
+                        _node_label(node, "S") for node in route["substrate_path"]
                     )
                     logger.info(
                         "Request %d link mapping: virtual link %s-%s -> substrate path %s "
                         "(bandwidth demand=%g)",
                         request_number,
-                        "abc"[route["virtual_edge"][0]],
-                        "abc"[route["virtual_edge"][1]],
+                        _node_label(route["virtual_edge"][0], "V"),
+                        _node_label(route["virtual_edge"][1], "V"),
                         substrate_path,
                         route["bandwidth_demand"],
                     )
@@ -214,8 +335,8 @@ def run_test(
                         logger.info(
                             "Request %d link resource: %s-%s bandwidth %g -> %g",
                             request_number,
-                            "ABCDE"[edge[0]],
-                            "ABCDE"[edge[1]],
+                            _node_label(edge[0], "S"),
+                            _node_label(edge[1], "S"),
                             bandwidth_before[edge],
                             bandwidth_after,
                         )
@@ -244,12 +365,7 @@ def run_test(
         )
         logger.info("Final substrate CPU: %s", environment.substrate.node_weights)
         logger.info("Final substrate link bandwidth: %s", _unique_bandwidth(environment.substrate))
-        if accepted != len(requests):
-            raise RuntimeError(
-                f"Expected both test requests to embed, but only "
-                f"{accepted}/{len(requests)} succeeded."
-            )
-        logger.info("Test passed: both requests embedded by DRL-VNE.")
+        logger.info("DRL-VNE run completed.")
         return {
             "accepted": accepted,
             "total_requests": len(requests),
@@ -275,7 +391,8 @@ def main() -> None:
         default=Path(__file__).with_name("drl_vne_test.log"),
     )
     arguments = parser.parse_args()
-    run_test(arguments.checkpoint, arguments.log_file)
+    substrate, requests = _prompt_topologies()
+    run_test(arguments.checkpoint, arguments.log_file, substrate, requests)
 
 
 if __name__ == "__main__":
