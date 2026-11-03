@@ -1,0 +1,8 @@
+--index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://pypi.org/simple
+
+numpy
+networkx
+pandas
+openpyxl
+torch==2.15.0+cpu
