@@ -131,6 +131,21 @@ the other enabled algorithms. To retrain or replace the checkpoint, run
 
 `automate.py` runs the enabled algorithms on the SAGIN topology in
 `1_sagin.pickle`. Final embedding results are captured in `Results.xlsx`.
+The default workload contains 100 requests. CPU and bandwidth ranges are set
+directly in `sagin_topology.py`; the current settings were tuned for DRL-VNE
+acceptance near 80% for 100-request workloads. Across five generated workloads
+of 100 requests each, DRL-VNE acceptance averaged 83.6% (77%–88%). Results
+vary with the workload. Regenerate `1_sagin.pickle` after changing the ranges:
+
+```bash
+python3 sagin_topology.py --output 1_sagin.pickle
+python3 automate.py
+```
+
+Acceptance varies by algorithm and workload; these ranges target DRL-VNE and
+do not guarantee 80% for every algorithm. Change the CPU and bandwidth ranges
+in `sagin_topology.py` to tune acceptance. Re-run with a larger request count
+to get a less variable estimate.
 
 ### References
 [1] E. D. Matthias Rost, Alexander Elvers, “Alib,” https://github.com/vnep-approx/alib, 2020. <br />

@@ -393,7 +393,7 @@ def addToExcel():
 
 def main(substrate, vne):
     tot=0
-    ls = [5]
+    ls = [100]
     for req_no in ls:
         tot += 1
         print(f"\n\treq_no: {req_no}\n")
