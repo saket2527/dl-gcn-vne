@@ -5,7 +5,6 @@
 Operation System: Microsoft Windows 10, 64bit.<br />
 Physical Memory (RAM) 16.0 GB.<br />
 
-
 ### Prerequisites
 
 Python 3.9.<br />
@@ -16,7 +15,7 @@ https://www.youtube.com/watch?v=JKB3aVyCMuo&t=506s<br />
 
 ### Installation
 
-###  Download the ALIB_Utility tool unzip and copy it to the execution drive.<br /> 
+### Download the ALIB_Utility tool unzip and copy it to the execution drive.<br />
 
 - Configure the alib by following the steps mentioned in the github reposotory [1]. <br />
 
@@ -24,27 +23,24 @@ https://www.youtube.com/watch?v=JKB3aVyCMuo&t=506s<br />
 
 - Make sure "P3_ALIB_MASTER\input" path contain senario_RedBestel.pickle. If not, generate the substrate network scenario for "senario_RedBestel.pickle" in folder P3_ALIB_MASTER\input and this pickle file contains substrate network information.<br />
 
-###   Download  NORD and keep it in the drive where P3_ALIB_MASTER is present. The  NORD  file contains all executable files related to the proposed and baseline approaches. <br />
+### Download  NORD and keep it in the drive where P3_ALIB_MASTER is present. The  NORD  file contains all executable files related to the proposed and baseline approaches. <br />
 
 - Topsis.py -> The Main file related to the  Proposed NORD approach.<br />
 - Greedy.py -> The Main file related to the  Greedy baseline approach.<br />
-- Nrm.py -> The Main file related to the  NRM baseline approach [2]. <br /> 
+- Nrm.py -> The Main file related to the  NRM baseline approach [2]. <br />
 - Rethinking.py -> The Main file related to the  DPGA baseline approach [3]. <br />
 - NodeRankCal.py -> The Main file related to the  VNE-NTANRC-D baseline approach [4]. <br />
 - PageRank.py -> The Main file related to the  VNE-NTANRC-S baseline approach [4]. <br />
-- Puvnp.py -> The Main file related to the  PUVNP  baseline approach [5]. <br />
-- Rematch.py -> The Main file related to the  ReMatch  baseline approach [6]. <br />
-
-
-
+- Puvnp.py -> The Main file related to the  PUVNP baseline approach [5]. <br />
+- Rematch.py -> The Main file related to the  ReMatch baseline approach [6]. <br />
 
 ## Usage
 
 ### DRL-VNE
 
-`drl_vne.py` implements the five-stage policy described in *Space-Air-
+`drl_vne.py` implements the five-stage policy described in _Space-Air-
 Ground Integrated Multi-domain Network Resource Orchestration based on Virtual
-Network Architecture: a DRL Method*. It trains on the existing
+Network Architecture: a DRL Method_. It trains on the existing
 `1_sagin.pickle` topology, evaluates generated VNRs, and adds a
 `DRL-VNE` row to `Results.xlsx`:
 
@@ -101,6 +97,11 @@ The regular `automate.py` run includes DL-GCN-VNE and records its results in
 python3 test_dl_gcn_vne.py
 ```
 
+Inference defaults to a routing-cost bias of `2.0` and a maximum acceptance rate
+of `0.9`. Override these with `--route-cost-weight` and
+`--max-acceptance-rate` when running `dl_vne.py`; the acceptance-rate value must
+be between `0.0` and `1.0`. The acceptance limit applies to each evaluated batch.
+
 ### GAT-VNE
 
 `gat_vne.py` uses a multi-head Graph Attention Network to score feasible
@@ -118,7 +119,7 @@ the other enabled algorithms. To retrain or replace the checkpoint, run
 `python3 train_gat.py`; options include `--episodes`,
 `--requests-per-episode`, `--heads`, and `--checkpoint`.
 
-###  In vne_u.py, we can set the various parameters related to Virtual network requests(VNRs).<br />
+### In vne_u.py, we can set the various parameters related to Virtual network requests(VNRs).<br />
 
 - We can set the minimum and maximum number of VMs of VNRs in the create_vne function.<br />
 
@@ -148,42 +149,45 @@ in `sagin_topology.py` to tune acceptance. Re-run with a larger request count
 to get a less variable estimate.
 
 ### References
+
 [1] E. D. Matthias Rost, Alexander Elvers, “Alib,” https://github.com/vnep-approx/alib, 2020. <br />
 [2] P. Zhang, H. Yao, Y. Liu, Virtual network embedding based on computing, network, and storage resource constraints, IEEE Internet of Things Journal 5 (5) (2017) 3298–3304. doi: https://doi.org/10.1109/JIOT.2017.2726120. <br />
 [3] Nguyen, Khoa TD, Qiao Lu, and Changcheng Huang. "Rethinking virtual link mapping in network virtualization." In 2020 IEEE 92nd Vehicular Technology Conference (VTC2020-Fall), pp. 1-5. IEEE, 2020, https://ieeexplore.ieee.org/document/9348799. <br />
 [4] H. Cao, L. Yang, H. Zhu, Novel node-ranking approach and multiple topology attributes-based embedding algorithm for single-domain virtual network embedding, IEEE Internet of Things Journal 5 (1) (2018) 108–120. doi: https://doi.org/10.1109/JIOT.2017.2773489. <br />
-[5] P. Zhang, Incorporating energy and load balance into virtual network embedding process, Computer Communications 129 (2018) 80–88. doi: 
+[5] P. Zhang, Incorporating energy and load balance into virtual network embedding process, Computer Communications 129 (2018) 80–88. doi:
 https://doi.org/10.1016/j.comcom.2018.07.027. <br />
 [6] A. Satpathy, M. N. Sahoo, L. Behera, C. Swain, ReMatch: An Efficient Virtual Data Center Re-Matching Strategy Based on Matching Theory,
 IEEE Transactions on Services Computing (2022). doi: https://doi.org/10.1109/TSC.2022.3183259. <br />
 
 ## Contributors
+
 - Mr. Keerthan Kumar T G<br />
-https://scholar.google.com/citations?user=fW7bzK8AAAAJ&hl=en <br />
+  https://scholar.google.com/citations?user=fW7bzK8AAAAJ&hl=en <br />
 - Mr. anurag satpathy<br />
-https://anuragsatpathy.github.io/<br />
+  https://anuragsatpathy.github.io/<br />
 - Dr. Sourav kanti addya<br />
-https://souravkaddya.in/<br />
+  https://souravkaddya.in/<br />
 - Dr Shashidhar G Koolagudi <br />
-https://scholar.google.co.in/citations?user=WAyKHHwAAAAJ&hl=en <br />
+  https://scholar.google.co.in/citations?user=WAyKHHwAAAAJ&hl=en <br />
 
 ## Citation & Acknowledgements
+
 This codebase is available publicly for only for non-commercial use. If you use this code or any content in your research or wish to refer to the baseline models published in the README, please cite the work as:
 @article{tg2023nord,<br />
-  title={NORD: NOde Ranking-based efficient virtual network embedding over single Domain substrate networks},<br />
-  author={TG, Keerthan Kumar and Addya, Sourav Kanti and Satpathy, Anurag and Koolagudi, Shashidhar G},<br />
-  journal={Computer Networks},<br />
-  volume={225},<br />
-  pages={109661},<br />
-  year={2023},<br />
-  publisher={Elsevier}<br />
+title={NORD: NOde Ranking-based efficient virtual network embedding over single Domain substrate networks},<br />
+author={TG, Keerthan Kumar and Addya, Sourav Kanti and Satpathy, Anurag and Koolagudi, Shashidhar G},<br />
+journal={Computer Networks},<br />
+volume={225},<br />
+pages={109661},<br />
+year={2023},<br />
+publisher={Elsevier}<br />
 }
 
-
 ## Paper Links to Cite
+
 - https://www.sciencedirect.com/science/article/pii/S1389128623001068
 - https://ieeexplore.ieee.org/document/10041377
 
-
 ## Contact
-If you have any questions, simply write a mail to  Keerthanswamy(AT)gmail(DOT)com.
+
+If you have any questions, simply write a mail to Keerthanswamy(AT)gmail(DOT)com.

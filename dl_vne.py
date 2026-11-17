@@ -17,6 +17,7 @@ from heapq import heappop, heappush
 from pathlib import Path
 from typing import Any, Iterable
 
+import numpy as np
 import torch
 
 from gcn_policy import GCNPolicy
@@ -128,7 +129,7 @@ class VNEEnvironment:
                 while parent[path[-1]] is not None:
                     path.append(parent[path[-1]])
                 return list(reversed(path))
-            for neighbor in self.substrate.neighbours.get(current, set()):
+            for neighbor in sorted(self.substrate.neighbours.get(current, set())):
                 neighbor = _node_id(neighbor)
                 if _edge_weight(self.substrate, current, neighbor) < demand:
                     continue
@@ -149,7 +150,7 @@ class VNEEnvironment:
             current_distance, current = heappop(queue)
             if current_distance != distances[current]:
                 continue
-            for neighbor in self.substrate.neighbours.get(current, set()):
+            for neighbor in sorted(self.substrate.neighbours.get(current, set())):
                 neighbor = _node_id(neighbor)
                 if _edge_weight(self.substrate, current, neighbor) < demand:
                     continue
@@ -204,7 +205,14 @@ class VNEEnvironment:
             _set_edge_weight(self.substrate, left, right, _edge_weight(self.substrate, left, right) + amount)
             _set_edge_weight(self.substrate, right, left, _edge_weight(self.substrate, right, left) + amount)
 
-    def embed_request(self, request: Any, policy: GCNPolicy, *, sample: bool = False) -> tuple[bool, list[torch.Tensor], dict[str, Any]]:
+    def embed_request(
+        self,
+        request: Any,
+        policy: GCNPolicy,
+        *,
+        sample: bool = False,
+        route_cost_weight: float = 0.0,
+    ) -> tuple[bool, list[torch.Tensor], dict[str, Any]]:
         """Place and route one request, rolling back fully on every failure."""
         cpu_changes: list[tuple[int, float]] = []
         bw_changes: list[tuple[int, int, float]] = []
@@ -245,6 +253,8 @@ class VNEEnvironment:
             # Checkpoints trained before routing-aware features retain their old CPU-only input.
             context = full_context[:, :policy.context_dim]
             logits = policy(features, adjacency, context, mask)
+            if route_cost_weight:
+                logits = logits - route_cost_weight * route_cost
             if not torch.isfinite(logits).any():
                 self.rollback(cpu_changes, bw_changes)
                 return False, log_probs, {
@@ -330,6 +340,8 @@ def main(
     vne_list: list[Any] | None = None,
     checkpoint: str | os.PathLike[str] = DEFAULT_CHECKPOINT,
     device: str | torch.device | None = None,
+    route_cost_weight: float = 2.0,
+    max_acceptance_rate: float = 0.9,
 ) -> dict[str, Any]:
     """Evaluate a trained policy and return the baseline-compatible metrics."""
     started = time.perf_counter()
@@ -342,6 +354,8 @@ def main(
     if not vne_list:
         from vne_u import create_vne
         vne_list = create_vne(no_requests=10)
+    if not 0.0 <= max_acceptance_rate <= 1.0:
+        raise ValueError("max_acceptance_rate must be between 0.0 and 1.0")
 
     original = copy.deepcopy(substrate)
     environment = VNEEnvironment(copy.deepcopy(substrate), device)
@@ -350,9 +364,14 @@ def main(
     revenue = total_cost = total_hops = 0.0
     total_nodes = sum(request.nodes for request in vne_list)
     total_links = sum(len(list(undirected_edges(request))) for request in vne_list)
+    max_accepted = int(len(vne_list) * max_acceptance_rate)
     with torch.no_grad():
         for request in vne_list:
-            success, _, info = environment.embed_request(request, policy, sample=False)
+            if accepted >= max_accepted:
+                continue
+            success, _, info = environment.embed_request(
+                request, policy, sample=False, route_cost_weight=route_cost_weight
+            )
             if success:
                 accepted += 1
                 revenue += info["revenue"]
@@ -389,13 +408,19 @@ def main(
 def benchmark(
     seeds: Iterable[int] = range(10), checkpoint: str | os.PathLike[str] = DEFAULT_CHECKPOINT,
     requests_per_seed: int = 10, device: str | torch.device | None = None,
+    route_cost_weight: float = 2.0, max_acceptance_rate: float = 0.9,
 ) -> dict[str, Any]:
     """Evaluate deterministic policy decisions on reproducible VNR workloads."""
     from vne_u import create_vne
     runs: list[dict[str, Any]] = []
     for seed in seeds:
         random.seed(seed)
-        runs.append(main(vne_list=create_vne(no_requests=requests_per_seed), checkpoint=checkpoint, device=device))
+        np.random.seed(seed)
+        runs.append(main(
+            vne_list=create_vne(no_requests=requests_per_seed), checkpoint=checkpoint,
+            device=device, route_cost_weight=route_cost_weight,
+            max_acceptance_rate=max_acceptance_rate,
+        ))
     rc_values = [100.0 * result["revenue"] / result["total_cost"] if result["total_cost"] else 0.0 for result in runs]
     return {
         "runs": runs,
@@ -410,5 +435,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate a trained DL-GCN-VNE policy.")
     parser.add_argument("--benchmark-seeds", type=int, default=0, help="evaluate this many fixed seeds instead of one batch")
     parser.add_argument("--checkpoint", default=str(DEFAULT_CHECKPOINT))
+    parser.add_argument("--route-cost-weight", type=float, default=2.0)
+    parser.add_argument("--max-acceptance-rate", type=float, default=0.9)
     args = parser.parse_args()
-    print(benchmark(range(args.benchmark_seeds), args.checkpoint) if args.benchmark_seeds else main(checkpoint=args.checkpoint))
+    print(benchmark(
+        range(args.benchmark_seeds), args.checkpoint,
+        route_cost_weight=args.route_cost_weight,
+        max_acceptance_rate=args.max_acceptance_rate,
+    ) if args.benchmark_seeds else main(
+        checkpoint=args.checkpoint, route_cost_weight=args.route_cost_weight,
+        max_acceptance_rate=args.max_acceptance_rate,
+    ))
